@@ -15,6 +15,7 @@ const {
   SES_REGION = "us-east-1",
   S3_BUCKET, S3_REGION = "us-east-1",
   APP_USER, APP_PASSWORD,
+  AUTH_TOKEN, // <-- ADDED HERE
 } = process.env;
 
 // Define S3 prefixes for folders
@@ -23,8 +24,7 @@ const SENT_PREFIX = "sent/";
 const TRASH_PREFIX = "trash/";
 
 // ─── ALLOWED SENDERS ─────────────────────────────────────────────────
-const ALLOWED_SENDERS = ["admin@oodac.com", "feedback@spin.oodac.com"];
-const AUTH_TOKEN = "secret-dev-token-for-maildeck-12345";
+const ALLOWED_SENDERS = ["admin@oodac.com", "feedback-spinfinity@oodac.com"];
 
 // ─── AWS CLIENTS & EXPRESS APP ───────────────────────────────────────
 const credentials = { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY };
@@ -57,7 +57,7 @@ const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
         const token = authHeader.substring(7, authHeader.length);
-        if (token === AUTH_TOKEN) {
+        if (token === AUTH_TOKEN) { // It will now compare against the token from the environment
             return next();
         }
     }
@@ -74,16 +74,14 @@ const streamToString = stream => new Promise((resolve, reject) => {
 
 const getEmailsFromS3 = async (prefix) => {
     const listCmdParams = { Bucket: S3_BUCKET, Prefix: prefix };
-    // Use a delimiter for the inbox to avoid listing sub-folders
     if (prefix === INBOX_PREFIX) {
         listCmdParams.Delimiter = '/';
     }
     const listCmd = new ListObjectsV2Command(listCmdParams);
     const listRes = await s3Client.send(listCmd);
     
-    // Filter out the "folder" object itself to prevent duplicates
     const objects = (listRes.Contents || [])
-      .filter(obj => obj.Key !== prefix && obj.Size > 0) // Ensures we don't process the folder placeholder
+      .filter(obj => obj.Key !== prefix && obj.Size > 0)
       .sort((a, b) => new Date(b.LastModified) - new Date(a.LastModified))
       .slice(0, 100); 
     
@@ -104,7 +102,6 @@ const getEmailsFromS3 = async (prefix) => {
 
         return {
           id: obj.Key, from: parsed.from?.text || "", to: parsed.to?.text || "",
-          // Read the custom header to correctly identify the sender account for sent items
           sender: parsed.headers.get('x-maildeck-sender') || parsed.from?.text || "", 
           subject: parsed.subject || "(no subject)", date: parsed.date || obj.LastModified,
           snippet: textSnippet.substring(0, 200),
@@ -118,17 +115,16 @@ const getEmailsFromS3 = async (prefix) => {
 };
 
 // ─── PROTECTED API ROUTES ───────────────────────────────────────────
+// ... All your other routes like app.post("/send-email", ...), etc. remain the same ...
 app.post("/send-email", authenticate, upload.array('attachments'), async (req, res) => {
   const { from, to, cc, bcc, subject, html } = req.body;
   if (!from || !to || !subject || !html) return res.status(400).json({ message: "Missing required fields" });
   if (!ALLOWED_SENDERS.includes(from)) return res.status(403).json({ message: `Sending from ${from} is not permitted.` });
   
   try {
-    // Build raw email for sending with attachments
     let rawEmail = `From: ${from}\nTo: ${to}\n`;
     if (cc) rawEmail += `Cc: ${cc}\n`;
     rawEmail += `Subject: ${subject}\n`;
-    // Add a custom header to identify the sender account. This is more robust than S3 metadata.
     rawEmail += `X-MailDeck-Sender: ${from}\n`;
     rawEmail += `MIME-Version: 1.0\n`;
     rawEmail += `Content-Type: multipart/mixed; boundary="boundary_12345"\n\n`;
@@ -156,7 +152,6 @@ app.post("/send-email", authenticate, upload.array('attachments'), async (req, r
     });
     const info = await sesClient.send(command);
 
-    // Manually save the sent email to S3 to ensure a single copy exists.
     const sentEmailKey = `${SENT_PREFIX}${info.MessageId}`;
     const s3SaveCommand = new PutObjectCommand({
       Bucket: S3_BUCKET,
@@ -261,5 +256,4 @@ app.get("/download-attachment", authenticate, async (req, res) => {
 
 
 // ─── Vercel Export ───────────────────────────────────────────────────
-// Vercel handles turning this Express app into a serverless function.
 module.exports = app;
