@@ -1,0 +1,1622 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MailDeck - Modern SES Client</title>
+    <!-- Tailwind CSS via CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Quill.js Editor -->
+    <link
+      href="https://cdn.quilljs.com/1.3.6/quill.snow.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.quilljs.com/1.3.6/quill.min.js"></script>
+    <style>
+      .modal-content {
+        animation: slide-down 0.3s ease-out;
+      }
+      @keyframes slide-down {
+        from {
+          transform: translateY(-20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
+      }
+      .active-nav {
+        background-color: #e0f2fe;
+        color: #0c4a6e;
+        font-weight: 600;
+      }
+      /* Quill Editor Customization */
+      #editor-container {
+        height: 250px;
+        display: flex;
+        flex-direction: column;
+      }
+      .ql-toolbar {
+        border-radius: 8px 8px 0 0 !important;
+        border-color: #d1d5db !important;
+      }
+      .ql-container {
+        border-radius: 0 0 8px 8px !important;
+        border-color: #d1d5db !important;
+        flex-grow: 1;
+        font-size: 1rem;
+      }
+      .compose-modal.maximized {
+        width: 95vw;
+        height: 90vh;
+        max-width: none;
+        max-height: none;
+      }
+      .compose-modal.maximized #editor-container {
+        height: auto;
+        flex-grow: 1;
+      }
+      .reply-quote {
+        border-left: 4px solid #e5e7eb;
+        padding-left: 1rem;
+        margin-top: 1.5rem;
+        color: #6b7280;
+        font-style: italic;
+      }
+      /* Iframe styling for email body */
+      #modalBody iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+      }
+      /* Read/Unread/Selected Styling */
+      .email-read {
+        background-color: #f8fafc;
+      }
+      .email-read .font-bold {
+        font-weight: 500;
+        color: #475569;
+      }
+      .email-unread {
+        background-color: white;
+      }
+      .email-unread .font-bold {
+        font-weight: 700;
+        color: #1e293b;
+      }
+      .email-row.email-selected {
+        background-color: #eff6ff !important;
+      }
+      /* Set header height for sticky calculations */
+      header {
+        height: 65px;
+      }
+    </style>
+  </head>
+  <body class="bg-slate-100 text-slate-800 font-sans">
+    <!-- Login Overlay -->
+    <div
+      id="login-overlay"
+      class="fixed inset-0 bg-slate-200 z-[100] flex items-center justify-center"
+    >
+      <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-sm">
+        <div class="flex items-center gap-3 mb-6 justify-center">
+          <svg
+            class="w-10 h-10 text-blue-600"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+            />
+          </svg>
+          <h1 class="text-3xl font-bold text-slate-800">MailDeck</h1>
+        </div>
+        <form id="login-form">
+          <div class="mb-4">
+            <label
+              for="username"
+              class="block text-sm font-medium text-slate-700"
+              >Username</label
+            >
+            <input
+              type="text"
+              id="username"
+              value="admin"
+              class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div class="mb-6">
+            <label
+              for="password"
+              class="block text-sm font-medium text-slate-700"
+              >Password</label
+            >
+            <input
+              type="password"
+              id="password"
+              value="Hggivfd80$"
+              class="mt-1 block w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm shadow-sm placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            type="submit"
+            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg"
+          >
+            Login
+          </button>
+          <p id="login-error" class="text-red-500 text-sm mt-2 text-center"></p>
+        </form>
+      </div>
+    </div>
+
+    <div
+      id="app-container"
+      class="hidden min-h-screen flex flex-col max-w-7xl mx-auto bg-white shadow-xl"
+    >
+      <!-- ─── HEADER ────────────────────────────────────────────────── -->
+      <header
+        class="flex items-center justify-between p-4 border-b border-slate-200 sticky top-0 bg-white/80 backdrop-blur-sm z-20"
+      >
+        <div class="flex items-center gap-3">
+          <!-- Mobile Menu Button -->
+          <button
+            id="menuBtn"
+            class="md:hidden p-2 rounded-full hover:bg-slate-200 transition-colors -ml-2"
+          >
+            <svg
+              class="w-6 h-6 text-slate-600"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+              />
+            </svg>
+          </button>
+          <svg
+            class="w-8 h-8 text-blue-600"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width="1.5"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+            />
+          </svg>
+          <h1 class="text-2xl font-bold text-slate-800">MailDeck</h1>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            id="composeBtn"
+            class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg shadow-sm transition-all flex items-center gap-2"
+          >
+            <svg
+              class="w-5 h-5"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="2"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"
+              />
+            </svg>
+            <span class="hidden sm:inline">Compose</span>
+          </button>
+          <button
+            id="refreshBtn"
+            title="Refresh"
+            class="p-2 rounded-full hover:bg-slate-200 transition-colors"
+          >
+            <svg
+              class="w-6 h-6 text-slate-600"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 512 512"
+              fill="currentColor"
+            >
+              <path
+                d="M463.5 224H472c13.3 0 24-10.7 24-24V72c0-9.7-5.8-18.5-14.8-22.2s-19.3-1.7-26.2 5.2L413.4 96.6c-87.6-86.5-228.7-86.2-315.8 1c-87.5 87.5-87.5 229.3 0 316.8s229.3 87.5 316.8 0c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0c-62.5 62.5-163.8 62.5-226.3 0s-62.5-163.8 0-226.3c62.2-62.2 162.7-62.5 225.3-1L327 183c-6.9 6.9-8.9 17.2-5.2 26.2s12.5 14.8 22.2 14.8H463.5z"
+              />
+            </svg>
+          </button>
+          <div class="relative">
+            <button
+              id="settingsBtn"
+              title="Settings"
+              class="p-2 rounded-full hover:bg-slate-200 transition-colors"
+            >
+              <svg
+                class="w-6 h-6 text-slate-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.438.995s.145.755.438.995l1.003.827c.48.398.668 1.03.26 1.431l-1.296 2.247a1.125 1.125 0 01-1.37.49l-1.217-.456c-.355-.133-.75-.072-1.075-.124a6.57 6.57 0 01-.22.127c-.332.183-.582.495-.645.87l-.213 1.281c-.09.543-.56.94-1.11.94h-2.593c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.52 6.52 0 01-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.003-.827c.293-.24.438.613-.438.995s-.145-.755-.438-.995l-1.003-.827a1.125 1.125 0 01-.26-1.431l1.296-2.247a1.125 1.125 0 011.37-.49l1.217.456c.355.133.75.072 1.075-.124.073-.044.146-.087.22-.127.332-.183.582-.495-.645-.87l.213-1.281z"
+                />
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
+            </button>
+            <div
+              id="settings-menu"
+              class="hidden absolute right-0 mt-2 w-64 bg-white rounded-lg shadow-xl border z-30"
+            ></div>
+          </div>
+        </div>
+      </header>
+
+      <!-- ─── LAYOUT CONTAINER ────────────────────────────────────── -->
+      <div class="flex-grow md:grid md:grid-cols-4 lg:grid-cols-5 relative">
+        <!-- ─── SIDEBAR NAVIGATION ─────────────────────────────────── -->
+        <div
+          id="sidebar-overlay"
+          class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"
+        ></div>
+        <aside
+          id="sidebar"
+          class="fixed inset-y-0 left-0 z-40 w-72 bg-white p-4 border-r transform -translate-x-full transition-transform md:relative md:translate-x-0 md:w-auto md:col-span-1 md:block"
+        >
+          <div class="space-y-4">
+            <div>
+              <h3
+                class="px-3 text-xs font-semibold uppercase text-slate-500 tracking-wider"
+              >
+                Folders
+              </h3>
+              <nav id="main-nav" class="mt-1 space-y-1">
+                <a
+                  href="#"
+                  data-view="inbox"
+                  class="flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  <span class="flex items-center gap-3">
+                    <svg
+                      class="w-5 h-5 text-slate-500"
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M2.25 13.5h3.86a2.25 2.25 0 012.25 2.25v3.86a2.25 2.25 0 01-2.25 2.25H2.25a2.25 2.25 0 01-2.25-2.25v-3.86a2.25 2.25 0 012.25-2.25zM12 4.5h3.86a2.25 2.25 0 012.25 2.25v3.86a2.25 2.25 0 01-2.25 2.25H12a2.25 2.25 0 01-2.25-2.25V6.75a2.25 2.25 0 012.25-2.25zM2.25 4.5h3.86a2.25 2.25 0 012.25 2.25v3.86a2.25 2.25 0 01-2.25 2.25H2.25a2.25 2.25 0 01-2.25-2.25V6.75a2.25 2.25 0 012.25-2.25zM12 13.5h3.86a2.25 2.25 0 012.25 2.25v3.86a2.25 2.25 0 01-2.25 2.25H12a2.25 2.25 0 01-2.25-2.25v-3.86a2.25 2.25 0 012.25-2.25z"
+                      />
+                    </svg>
+                    Inbox
+                  </span>
+                  <span
+                    id="inbox-count"
+                    class="text-xs font-medium bg-slate-200 text-slate-600 rounded-full px-2 py-0.5"
+                  ></span>
+                </a>
+                <a
+                  href="#"
+                  data-view="sent"
+                  class="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  <svg
+                    class="w-5 h-5 text-slate-500"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+                    />
+                  </svg>
+                  Sent
+                </a>
+                <a
+                  href="#"
+                  data-view="trash"
+                  class="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100"
+                >
+                  <svg
+                    class="w-5 h-5 text-slate-500"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                    />
+                  </svg>
+                  Trash
+                </a>
+              </nav>
+            </div>
+            <div>
+              <h3
+                class="px-3 text-xs font-semibold uppercase text-slate-500 tracking-wider"
+              >
+                Accounts
+              </h3>
+              <nav id="account-nav" class="mt-1 space-y-1">
+                <!-- Account filters will be populated by JS -->
+              </nav>
+            </div>
+          </div>
+        </aside>
+
+        <!-- ─── MAIN CONTENT (EMAIL LIST) ────────────────────────── -->
+        <main class="md:col-span-3 lg:col-span-4 flex flex-col min-h-0">
+          <!-- Sticky Search Bar / Action Bar -->
+          <div class="flex flex-col sticky top-[65px] bg-white z-10 border-b">
+            <!-- Action Bar -->
+            <div
+              id="actionBar"
+              class="hidden items-center justify-between p-2 bg-slate-50"
+            >
+              <div class="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="selectAllCheckbox"
+                  class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                />
+                <span
+                  id="selectionCount"
+                  class="text-sm font-semibold text-slate-700"
+                ></span>
+              </div>
+              <button
+                id="deleteBtn"
+                class="flex items-center gap-2 text-sm bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold py-1.5 px-3 rounded-md"
+              >
+                <svg
+                  class="w-4 h-4"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="2"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                  />
+                </svg>
+                <span id="deleteBtnText">Delete</span>
+              </button>
+            </div>
+            <!-- Search/Pagination Bar -->
+            <div class="flex items-center justify-between p-2">
+              <div class="relative flex-grow">
+                <input
+                  type="search"
+                  id="search-input"
+                  placeholder="Search mail..."
+                  class="w-full pl-10 pr-4 py-2 text-sm border border-slate-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                />
+                <div
+                  class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+                >
+                  <svg
+                    class="w-5 h-5 text-slate-400"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <div id="trashActions" class="hidden">
+                <button
+                  id="emptyTrashBtn"
+                  class="ml-4 text-sm text-blue-600 hover:text-blue-800 font-semibold"
+                >
+                  Empty Trash
+                </button>
+              </div>
+              <div
+                id="pagination-controls"
+                class="flex-shrink-0 flex items-center gap-2 ml-2 text-sm text-slate-600"
+              ></div>
+            </div>
+          </div>
+          <!-- Scrollable Email List -->
+          <div id="emailList" class="flex-grow overflow-y-auto"></div>
+        </main>
+      </div>
+
+      <!-- ─── FOOTER ─────────────────────────────────────────────────── -->
+      <footer
+        class="text-center p-4 text-xs text-slate-500 border-t border-slate-200"
+      >
+        <p>&copy; 2024 MailDeck. A simple client for Amazon SES.</p>
+      </footer>
+    </div>
+
+    <!-- ─── COMPOSE MODAL ─────────────────────────────────────────── -->
+    <div
+      id="composeModal"
+      class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4"
+    >
+      <div
+        class="modal-content compose-modal bg-white rounded-lg shadow-2xl w-full max-w-3xl flex flex-col transition-all duration-300"
+      >
+        <div
+          class="flex justify-between items-center p-3 bg-slate-100 rounded-t-lg border-b"
+        >
+          <h3
+            id="composeModalTitle"
+            class="text-md font-semibold text-slate-700"
+          >
+            New Message
+          </h3>
+          <div class="flex items-center gap-2">
+            <button
+              id="expandBtn"
+              title="Expand"
+              class="p-1 rounded-full hover:bg-slate-200"
+            >
+              <svg
+                class="w-4 h-4 text-slate-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="2"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M20.25 20.25v-4.5m0 4.5h-4.5m4.5 0L15 15"
+                />
+              </svg>
+            </button>
+            <button
+              class="modal-close p-1 rounded-full text-2xl leading-none hover:bg-slate-200"
+              title="Close"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+
+        <form id="emailForm" class="p-4 flex-grow flex flex-col min-h-0">
+          <div class="border-b border-slate-200">
+            <div class="flex items-center">
+              <label for="from" class="text-sm text-slate-500 pr-2">From</label>
+              <select
+                id="from"
+                name="from"
+                class="flex-1 p-2 text-sm bg-transparent focus:outline-none"
+              ></select>
+            </div>
+          </div>
+          <div class="border-b border-slate-200">
+            <div class="flex items-center">
+              <label for="to" class="text-sm text-slate-500 pr-2">To</label>
+              <input
+                type="email"
+                id="to"
+                name="to"
+                required
+                class="flex-1 p-2 text-sm focus:outline-none"
+              />
+              <div class="text-sm">
+                <span
+                  id="cc-btn"
+                  class="cursor-pointer text-slate-500 hover:text-slate-800 px-2"
+                  >Cc</span
+                >
+                <span
+                  id="bcc-btn"
+                  class="cursor-pointer text-slate-500 hover:text-slate-800 px-2"
+                  >Bcc</span
+                >
+              </div>
+            </div>
+          </div>
+          <div id="cc-container" class="border-b border-slate-200 hidden">
+            <div class="flex items-center">
+              <label for="cc" class="text-sm text-slate-500 pr-2">Cc</label
+              ><input
+                type="email"
+                id="cc"
+                name="cc"
+                class="flex-1 p-2 text-sm focus:outline-none"
+              />
+            </div>
+          </div>
+          <div id="bcc-container" class="border-b border-slate-200 hidden">
+            <div class="flex items-center">
+              <label for="bcc" class="text-sm text-slate-500 pr-2">Bcc</label
+              ><input
+                type="email"
+                id="bcc"
+                name="bcc"
+                class="flex-1 p-2 text-sm focus:outline-none"
+              />
+            </div>
+          </div>
+          <div class="border-b border-slate-200">
+            <input
+              type="text"
+              id="subject"
+              name="subject"
+              required
+              class="w-full p-2 text-sm focus:outline-none"
+              placeholder="Subject"
+            />
+          </div>
+
+          <div class="mt-4 flex-grow flex flex-col min-h-0">
+            <div id="editor-container"></div>
+          </div>
+
+          <div
+            id="attachments-list"
+            class="text-xs p-2 space-y-1 text-slate-600"
+          ></div>
+          <input type="file" id="file-input" multiple class="hidden" />
+
+          <div class="flex justify-between items-center pt-4 mt-auto">
+            <div class="flex items-center gap-2">
+              <button
+                type="submit"
+                class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-md shadow-sm"
+              >
+                Send
+              </button>
+              <button
+                id="attachBtn"
+                type="button"
+                title="Attach file"
+                class="p-2 rounded-full hover:bg-slate-200"
+              >
+                <svg
+                  class="w-5 h-5 text-slate-600"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke-width="1.5"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3.375 3.375 0 1112.81 7.344l-8.682 8.682a1.5 1.5 0 002.122 2.122l6.884-6.884a.75.75 0 011.06 1.06l-6.884 6.884a3 3 0 11-4.243-4.243l8.682-8.682a4.875 4.875 0 106.894 6.894l-10.94 10.94a6.375 6.375 0 11-9.016-9.016l7.693-7.693a.75.75 0 011.06 1.06l-7.693 7.693a4.875 4.875 0 106.894 6.894l10.94-10.94a3.375 3.375 0 114.774 4.774z"
+                  />
+                </svg>
+              </button>
+            </div>
+            <button
+              id="discardBtn"
+              type="button"
+              title="Discard draft"
+              class="p-2 rounded-full hover:bg-slate-200"
+            >
+              <svg
+                class="w-5 h-5 text-slate-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke-width="1.5"
+                stroke="currentColor"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                />
+              </svg>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ─── VIEW EMAIL MODAL ─────────────────────────────────────────── -->
+    <div
+      id="emailModal"
+      class="fixed inset-0 bg-black/60 z-50 hidden items-center justify-center p-4"
+    >
+      <div
+        class="modal-content bg-white rounded-lg shadow-2xl w-full max-w-4xl flex flex-col"
+        style="height: 85vh; max-height: 800px;"
+      >
+        <div class="flex justify-between items-start p-4 border-b">
+          <div>
+            <h3 id="modalSubject" class="text-xl font-semibold"></h3>
+            <div class="text-sm text-slate-500 mt-1">
+              <strong>From:</strong> <span id="modalFrom"></span>
+            </div>
+            <div class="text-sm text-slate-500">
+              <strong>To:</strong> <span id="modalTo"></span>
+            </div>
+            <div class="text-sm text-slate-500">
+              <strong>Date:</strong> <span id="modalDate"></span>
+            </div>
+          </div>
+          <button
+            class="modal-close p-1 rounded-full text-2xl leading-none hover:bg-slate-200"
+          >
+            &times;
+          </button>
+        </div>
+        <div
+          id="modalAttachments"
+          class="hidden p-4 border-b border-slate-200"
+        ></div>
+        <div
+          id="modalBody"
+          class="modal-body p-0 flex-grow overflow-y-auto bg-white"
+        >
+          <!-- Iframe will be inserted here by JS -->
+        </div>
+        <div class="p-4 border-t bg-slate-50 flex justify-end">
+          <button
+            id="modalReplyBtn"
+            class="bg-slate-600 hover:bg-slate-700 text-white font-semibold py-2 px-5 rounded-lg shadow-sm transition-all flex items-center gap-2"
+          >
+            <svg
+              class="w-5 h-5"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+              />
+            </svg>
+            Reply
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="statusMessage"
+      class="fixed bottom-5 right-5 z-[100] p-4 rounded-lg shadow-lg text-white max-w-sm hidden"
+    ></div>
+
+    <script>
+      // --- GLOBAL STATE & CONFIG ---
+      let allEmails = []
+      let currentPage = 1
+      let emailsPerPage = 50
+      const availableSenders = [
+        "admin@oodac.com",
+        "feedback-spinfinity@oodac.com",
+      ]
+      let currentFromAddress = availableSenders[0]
+      let currentView = "inbox"
+      let currentAccountFilter = "all"
+      let quill
+      let searchQuery = ""
+      let readEmailIds = new Set()
+      let authToken = null
+      let selectedEmails = new Set()
+
+      // --- DOM ELEMENTS ---
+      const loginOverlay = document.getElementById("login-overlay")
+      const appContainer = document.getElementById("app-container")
+      const loginForm = document.getElementById("login-form")
+      const loginError = document.getElementById("login-error")
+      const searchInput = document.getElementById("search-input")
+      const emailListDiv = document.getElementById("emailList")
+      const composeModal = document.getElementById("composeModal")
+      const emailModal = document.getElementById("emailModal")
+      const paginationControlsDiv = document.getElementById(
+        "pagination-controls"
+      )
+      const statusDiv = document.getElementById("statusMessage")
+      const fileInput = document.getElementById("file-input")
+      const attachmentsList = document.getElementById("attachments-list")
+      const sidebar = document.getElementById("sidebar")
+      const sidebarOverlay = document.getElementById("sidebar-overlay")
+      const menuBtn = document.getElementById("menuBtn")
+      const actionBar = document.getElementById("actionBar")
+      const selectAllCheckbox = document.getElementById("selectAllCheckbox")
+      const selectionCount = document.getElementById("selectionCount")
+      const deleteBtn = document.getElementById("deleteBtn")
+      const deleteBtnText = document.getElementById("deleteBtnText")
+      const trashActions = document.getElementById("trashActions")
+      const emptyTrashBtn = document.getElementById("emptyTrashBtn")
+
+      // --- AUTHENTICATION & INITIALIZATION ---
+      window.addEventListener("load", () => {
+        authToken = localStorage.getItem("maildeck_token")
+        if (authToken) {
+          loginOverlay.classList.add("hidden")
+          appContainer.classList.remove("hidden")
+          initializeApp()
+        } else {
+          loginOverlay.classList.remove("hidden")
+        }
+      })
+
+      loginForm.addEventListener("submit", async (e) => {
+        e.preventDefault()
+        const username = document.getElementById("username").value
+        const password = document.getElementById("password").value
+        loginError.textContent = ""
+        try {
+          const res = await fetch("/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password }),
+          })
+          const data = await res.json()
+          if (res.ok && data.success) {
+            authToken = data.token
+            localStorage.setItem("maildeck_token", authToken)
+            loginOverlay.classList.add("hidden")
+            appContainer.classList.remove("hidden")
+            initializeApp()
+          } else {
+            loginError.textContent = data.message || "Login failed."
+          }
+        } catch (err) {
+          loginError.textContent = "Could not connect to the server."
+        }
+      })
+
+      function initializeApp() {
+        initializeQuill()
+        loadReadStatus()
+        loadEmails(currentView)
+        renderAccountNav()
+        renderSettingsMenu()
+        addAppEventListeners()
+      }
+
+      function initializeQuill() {
+        if (!quill) {
+          quill = new Quill("#editor-container", {
+            modules: {
+              toolbar: [
+                ["bold", "italic", "underline", "link"],
+                [{ list: "ordered" }, { list: "bullet" }],
+              ],
+            },
+            placeholder: "Compose your message...",
+            theme: "snow",
+          })
+        }
+      }
+
+      // --- SELECTION & ACTION BAR LOGIC ---
+      function updateActionBar() {
+        const numSelected = selectedEmails.size
+        if (numSelected > 0) {
+          actionBar.classList.remove("hidden")
+          actionBar.classList.add("flex")
+          selectionCount.textContent = `${numSelected} selected`
+          deleteBtnText.textContent =
+            currentView === "trash" ? "Delete Permanently" : "Delete"
+        } else {
+          actionBar.classList.add("hidden")
+          actionBar.classList.remove("flex")
+        }
+        const visibleCheckboxes = emailListDiv.querySelectorAll(
+          ".email-checkbox"
+        )
+        selectAllCheckbox.checked =
+          numSelected > 0 &&
+          numSelected === visibleCheckboxes.length &&
+          visibleCheckboxes.length > 0
+      }
+
+      function clearSelection() {
+        selectedEmails.clear()
+        emailListDiv
+          .querySelectorAll(".email-checkbox")
+          .forEach((cb) => (cb.checked = false))
+        emailListDiv
+          .querySelectorAll(".email-selected")
+          .forEach((row) => row.classList.remove("email-selected"))
+        updateActionBar()
+      }
+
+      // --- READ/UNREAD STATUS ---
+      function loadReadStatus() {
+        const storedIds = JSON.parse(
+          localStorage.getItem("readEmailIds") || "[]"
+        )
+        readEmailIds = new Set(storedIds)
+      }
+
+      function markAsRead(emailId) {
+        if (!readEmailIds.has(emailId)) {
+          readEmailIds.add(emailId)
+          localStorage.setItem(
+            "readEmailIds",
+            JSON.stringify([...readEmailIds])
+          )
+          const emailRow = document.querySelector(
+            `[data-email-id="${emailId}"]`
+          )
+          if (emailRow) {
+            emailRow.classList.remove("email-unread")
+            emailRow.classList.add("email-read")
+            emailRow
+              .querySelectorAll(".font-bold")
+              .forEach((el) => el.classList.replace("font-bold", "font-medium"))
+          }
+        }
+      }
+
+      // --- HELPER FUNCTIONS ---
+      const escapeHTML = (str) => {
+        if (!str) return ""
+        const p = document.createElement("p")
+        p.textContent = str
+        return p.innerHTML
+      }
+
+      function parseSender(fromStr) {
+        if (!fromStr) return { name: "Unknown", email: "" }
+        const match = fromStr.match(/(.*)<(.+)>/)
+        if (match) {
+          const name = match[1].trim().replace(/^"|"$/g, "")
+          const email = match[2].trim()
+          return { name: name || email, email: email }
+        }
+        return { name: fromStr.trim(), email: fromStr.trim() }
+      }
+
+      function openModal(modal) {
+        modal.classList.remove("hidden")
+        modal.classList.add("flex")
+      }
+      function closeModal(modal) {
+        modal.classList.remove("flex")
+        modal.classList.add("hidden")
+      }
+      function showStatus(message, type = "success") {
+        statusDiv.textContent = message
+        statusDiv.className = `fixed bottom-5 right-5 z-[100] p-4 rounded-lg shadow-lg text-white max-w-sm ${
+          type === "success" ? "bg-green-500" : "bg-red-500"
+        }`
+        statusDiv.classList.remove("hidden")
+        setTimeout(() => {
+          statusDiv.classList.add("hidden")
+        }, 4000)
+      }
+
+      function formatEmailDate(dateString) {
+        const emailDate = new Date(dateString)
+        const today = new Date()
+        const isToday =
+          emailDate.getFullYear() === today.getFullYear() &&
+          emailDate.getMonth() === today.getMonth() &&
+          emailDate.getDate() === today.getDate()
+        if (isToday) {
+          return emailDate.toLocaleTimeString([], {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        } else {
+          return emailDate.toLocaleDateString([], {
+            month: "short",
+            day: "numeric",
+          })
+        }
+      }
+
+      // --- DATA LOADING & RENDERING ---
+      async function authenticatedFetch(url, options = {}) {
+        if (!authToken) {
+          console.error("Auth token is missing. Reloading.")
+          localStorage.removeItem("maildeck_token")
+          location.reload()
+          return
+        }
+        const headers = {
+          ...options.headers,
+          Authorization: `Bearer ${authToken}`,
+        }
+        const res = await fetch(url, { ...options, headers })
+        if (res.status === 401) {
+          console.error(`Received 401 Unauthorized for ${url}. Reloading.`)
+          localStorage.removeItem("maildeck_token")
+          location.reload()
+        }
+        return res
+      }
+
+      async function loadEmails(view = "inbox") {
+        clearSelection()
+        emailListDiv.innerHTML = `<p class='p-4 text-slate-500'>Loading ${view} items...</p>`
+        paginationControlsDiv.innerHTML = ""
+        trashActions.classList.toggle("hidden", view !== "trash")
+
+        try {
+          const res = await authenticatedFetch(`/${view}`)
+          const json = await res.json()
+          if (!res.ok) throw new Error(json.message || "Fetch failed.")
+          allEmails = json.emails
+
+          if (view === "inbox" && document.getElementById("inbox-count")) {
+            document.getElementById("inbox-count").textContent = json.totalCount
+          }
+          currentPage = 1
+          renderPage(currentPage)
+        } catch (err) {
+          emailListDiv.innerHTML = `<div class="m-4 p-4 rounded-md bg-red-100 text-red-700">Unable to load ${view}: ${err.message}</div>`
+        }
+      }
+
+      function renderPage(currentPageNumber) {
+        currentPage = currentPageNumber
+        clearSelection()
+        let filteredEmails = allEmails
+
+        if (currentAccountFilter !== "all") {
+          if (currentView === "inbox") {
+            filteredEmails = filteredEmails.filter(
+              (email) => email.to && email.to.includes(currentAccountFilter)
+            )
+          } else if (currentView === "sent") {
+            filteredEmails = filteredEmails.filter(
+              (email) => email.sender === currentAccountFilter
+            )
+          }
+        }
+
+        if (searchQuery) {
+          const lowerCaseQuery = searchQuery.toLowerCase()
+          filteredEmails = filteredEmails.filter(
+            (email) =>
+              (email.from &&
+                email.from.toLowerCase().includes(lowerCaseQuery)) ||
+              (email.subject &&
+                email.subject.toLowerCase().includes(lowerCaseQuery)) ||
+              (email.snippet &&
+                email.snippet.toLowerCase().includes(lowerCaseQuery))
+          )
+        }
+
+        paginationControlsDiv.classList.toggle(
+          "hidden",
+          filteredEmails.length === 0
+        )
+        if (currentView === "trash") {
+          trashActions.classList.toggle("hidden", filteredEmails.length === 0)
+        }
+
+        if (filteredEmails.length === 0) {
+          emailListDiv.innerHTML = `<p class='p-4 text-slate-500 text-center'><em>No messages found.</em></p>`
+          paginationControlsDiv.innerHTML = ""
+          return
+        }
+
+        const start = (currentPage - 1) * emailsPerPage
+        const end = start + emailsPerPage
+        const paginatedEmails = filteredEmails.slice(start, end)
+
+        emailListDiv.innerHTML = paginatedEmails
+          .map((email) => renderEmailCard(email))
+          .join("")
+        renderPaginationControls(filteredEmails.length)
+      }
+
+      function renderEmailCard(m) {
+        const isRead = readEmailIds.has(m.id)
+        const readClass = isRead ? "email-read" : "email-unread"
+        const fontWeightClass = isRead ? "font-medium" : "font-bold"
+        const dateString = formatEmailDate(m.date)
+
+        const sender = parseSender(m.from)
+        const recipient = parseSender(m.to)
+        const displayName =
+          currentView === "sent"
+            ? `To: ${recipient.name || recipient.email}`
+            : sender.name || sender.email
+
+        const attachmentIcon = m.hasAttachments
+          ? `<svg class="w-4 h-4 text-slate-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3.375 3.375 0 1112.81 7.344l-8.682 8.682a1.5 1.5 0 002.122 2.122l6.884-6.884a.75.75 0 011.06 1.06l-6.884 6.884a3 3 0 11-4.243-4.243l8.682-8.682a4.875 4.875 0 106.894 6.894l-10.94 10.94a6.375 6.375 0 11-9.016-9.016l7.693-7.693a.75.75 0 011.06 1.06l-7.693 7.693a4.875 4.875 0 106.894 6.894l10.94-10.94a3.375 3.375 0 114.774 4.774z" /></svg>`
+          : ""
+
+        return `
+    <div class="email-row flex items-center ${readClass} transition-colors border-b border-gray-200 pr-4" data-email-id="${escapeHTML(
+          m.id
+        )}">
+        <div class="p-3 flex-shrink-0 flex items-center h-full">
+            <input type="checkbox" class="email-checkbox h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" data-email-id="${escapeHTML(
+              m.id
+            )}">
+        </div>
+        <div class="flex-grow cursor-pointer min-w-0" onclick="openEmailModalWithId(event, '${escapeHTML(
+          m.id
+        )}')">
+            <!-- Mobile View -->
+            <div class="p-2 md:hidden">
+                <div class="flex justify-between items-start">
+                    <p class="${fontWeightClass} truncate" title="${escapeHTML(
+          m.from
+        )}">${escapeHTML(displayName)}</p>
+                    <div class="flex-shrink-0 ml-4 flex items-center gap-2">
+                         ${attachmentIcon} <span class="text-xs text-slate-500">${escapeHTML(
+          dateString
+        )}</span>
+                    </div>
+                </div>
+                <div class="mt-1">
+                     <p class="text-sm ${fontWeightClass} text-slate-700 truncate">${
+          escapeHTML(m.subject) || "(No Subject)"
+        }</p>
+                     <p class="text-sm text-slate-500 truncate mt-0.5">${escapeHTML(
+                       m.snippet
+                     )}</p>
+                </div>
+            </div>
+            <!-- Desktop View -->
+            <div class="hidden md:flex items-center gap-4 py-3 min-w-0">
+                <div class="w-1/4 lg:w-1/5 flex-shrink-0 ${fontWeightClass} truncate" title="${escapeHTML(
+          m.from
+        )}">${escapeHTML(displayName)}</div>
+                <div class="flex-grow min-w-0 truncate">
+                    <span class="${fontWeightClass} text-slate-700">${
+          escapeHTML(m.subject) || "(No Subject)"
+        }</span>
+                    <span class="text-sm text-slate-500 ml-2">- ${escapeHTML(
+                      m.snippet
+                    )}</span>
+                </div>
+                <div class="ml-auto flex-shrink-0 flex items-center gap-4 pl-4">
+                  ${attachmentIcon || '<div class="w-4"></div>'}
+                  <div class="text-xs text-slate-500 whitespace-nowrap">${escapeHTML(
+                    dateString
+                  )}</div>
+                </div>
+            </div>
+        </div>
+    </div>`
+      }
+
+      function openEmailModalWithId(event, emailId) {
+        if (event.target.type === "checkbox") return
+        const email = allEmails.find((e) => e.id === emailId)
+        if (email) openEmailModal(email)
+      }
+
+      function renderPaginationControls(filteredCount) {
+        const totalPages = Math.ceil(filteredCount / emailsPerPage)
+        const startItem =
+          filteredCount === 0 ? 0 : (currentPage - 1) * emailsPerPage + 1
+        const endItem = Math.min(startItem + emailsPerPage - 1, filteredCount)
+
+        const paginationHtml = `<span id="page-info" class="hidden sm:inline">${startItem}-${endItem} of ${filteredCount}</span><div class="flex items-center gap-1"><select id="emails-per-page" class="bg-transparent text-sm border-none focus:ring-0 appearance-none p-1"><option value="20" ${
+          emailsPerPage === 20 ? "selected" : ""
+        }>20/page</option><option value="50" ${
+          emailsPerPage === 50 ? "selected" : ""
+        }>50/page</option><option value="100" ${
+          emailsPerPage === 100 ? "selected" : ""
+        }>100/page</option></select><button id="prev-page-btn" class="p-2 rounded-full hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg></button><button id="next-page-btn" class="p-2 rounded-full hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"><svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg></button></div>`
+        paginationControlsDiv.innerHTML = paginationHtml
+
+        document.getElementById("prev-page-btn").disabled = currentPage === 1
+        document.getElementById("next-page-btn").disabled =
+          currentPage >= totalPages
+
+        document.getElementById("prev-page-btn").onclick = () => {
+          if (currentPage > 1) renderPage(currentPage - 1)
+        }
+        document.getElementById("next-page-btn").onclick = () => {
+          if (currentPage < totalPages) renderPage(currentPage + 1)
+        }
+        document.getElementById("emails-per-page").onchange = (e) => {
+          emailsPerPage = parseInt(e.target.value, 10)
+          renderPage(1)
+        }
+      }
+
+      // --- NAVIGATION UI ---
+      function updateActiveNav() {
+        document
+          .querySelectorAll("#main-nav a")
+          .forEach((link) =>
+            link.classList.toggle(
+              "active-nav",
+              link.dataset.view === currentView
+            )
+          )
+        document
+          .querySelectorAll("#account-nav a")
+          .forEach((link) =>
+            link.classList.toggle(
+              "active-nav",
+              link.dataset.account === currentAccountFilter
+            )
+          )
+      }
+
+      function renderAccountNav() {
+        const nav = document.getElementById("account-nav")
+        let navHtml = `<a href="#" data-account="all" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100">All Accounts</a>`
+        navHtml += availableSenders
+          .map(
+            (sender) =>
+              `<a href="#" data-account="${sender}" class="flex items-center gap-3 px-3 py-2 rounded-md text-sm text-slate-700 hover:bg-slate-100 truncate" title="${sender}">${sender}</a>`
+          )
+          .join("")
+        nav.innerHTML = navHtml
+        updateActiveNav()
+      }
+
+      // --- MODAL & FORM LOGIC ---
+      // --- COMPOSE / REPLY / VIEW LOGIC ---
+      function resetAndOpenComposeModal() {
+        document.getElementById("emailForm").reset()
+        attachmentsList.innerHTML = ""
+        fileInput.value = ""
+        document.getElementById("composeModalTitle").textContent = "New Message"
+        quill.setText("")
+        document.getElementById("cc-container").classList.add("hidden")
+        document.getElementById("bcc-container").classList.add("hidden")
+        document.querySelector(".compose-modal").classList.remove("maximized")
+        const fromSelect = document.getElementById("from")
+        fromSelect.innerHTML = availableSenders
+          .map(
+            (s) =>
+              `<option value="${s}" ${
+                s === currentFromAddress ? "selected" : ""
+              }>${s}</option>`
+          )
+          .join("")
+        openModal(composeModal)
+      }
+      function openEmailModal(email) {
+        if (!email) return
+        markAsRead(email.id)
+        document.getElementById("modalSubject").textContent =
+          email.subject || "(No Subject)"
+        document.getElementById("modalDate").textContent = new Date(
+          email.date
+        ).toLocaleString()
+        if (currentView === "sent") {
+          document.getElementById("modalFrom").textContent = email.sender
+          document.getElementById("modalTo").textContent = email.to
+        } else {
+          document.getElementById("modalFrom").textContent = email.from
+          document.getElementById("modalTo").textContent = email.to
+        }
+
+        const modalBody = document.getElementById("modalBody")
+        modalBody.innerHTML = ""
+        if (email.htmlBody) {
+          const iframe = document.createElement("iframe")
+          iframe.setAttribute("sandbox", "allow-same-origin")
+          iframe.setAttribute("srcdoc", email.htmlBody)
+          modalBody.appendChild(iframe)
+        } else {
+          const pre = document.createElement("pre")
+          pre.style.fontFamily = "sans-serif"
+          pre.style.padding = "1.5rem"
+          pre.textContent = email.snippet
+          modalBody.appendChild(pre)
+        }
+
+        const attachmentsContainer = document.getElementById("modalAttachments")
+        if (email.attachments && email.attachments.length > 0) {
+          let attachmentsHtml =
+            '<h4 class="text-xs font-bold uppercase text-slate-500 mb-2">Attachments</h4><div class="space-y-1">'
+          email.attachments.forEach((att) => {
+            const downloadUrl = `/download-attachment?emailId=${encodeURIComponent(
+              email.id
+            )}&index=${att.index}`
+            attachmentsHtml += `<a href="#" data-download-url="${downloadUrl}" data-filename="${escapeHTML(
+              att.filename
+            )}" class="flex items-center gap-2 p-2 bg-slate-100 rounded-md hover:bg-slate-200 transition-colors"><svg class="w-4 h-4 text-slate-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3.375 3.375 0 1112.81 7.344l-8.682 8.682a1.5 1.5 0 002.122 2.122l6.884-6.884a.75.75 0 011.06 1.06l-6.884 6.884a3 3 0 11-4.243-4.243l8.682-8.682a4.875 4.875 0 106.894 6.894l-10.94 10.94a6.375 6.375 0 11-9.016-9.016l7.693-7.693a.75.75 0 011.06 1.06l-7.693 7.693a4.875 4.875 0 106.894 6.894l10.94-10.94a3.375 3.375 0 114.774 4.774z"></path></svg><span class="text-sm font-medium text-slate-800">${escapeHTML(
+              att.filename
+            )}</span><span class="text-xs text-slate-500 ml-auto">${(
+              att.size / 1024
+            ).toFixed(1)} KB</span></a>`
+          })
+          attachmentsHtml += "</div>"
+          attachmentsContainer.innerHTML = attachmentsHtml
+          attachmentsContainer.classList.remove("hidden")
+        } else {
+          attachmentsContainer.classList.add("hidden")
+          attachmentsContainer.innerHTML = ""
+        }
+
+        document.getElementById("modalReplyBtn").onclick = () =>
+          handleReply(email)
+        openModal(emailModal)
+      }
+
+      function handleReply(email) {
+        if (!email) return
+        closeModal(emailModal)
+        const sender = parseSender(email.from)
+        const replySubject = email.subject.toLowerCase().startsWith("re:")
+          ? email.subject
+          : `Re: ${email.subject}`
+        const quotedBody = `<p><br></p><blockquote class="reply-quote">On ${new Date(
+          email.date
+        ).toLocaleString()}, ${escapeHTML(
+          email.from
+        )} wrote:<br><br>${escapeHTML(email.snippet)}</blockquote>`
+        resetAndOpenComposeModal()
+        document.getElementById("composeModalTitle").textContent =
+          "Reply to Message"
+        const form = document.getElementById("emailForm")
+        form.to.value = sender.email
+        form.subject.value = replySubject
+        quill.root.innerHTML = quotedBody
+        quill.focus()
+      }
+
+      // --- SETTINGS LOGIC ---
+      function renderSettingsMenu() {
+        const menu = document.getElementById("settings-menu")
+        let menuHtml = `<div class="p-3 border-b"><p class="text-sm font-semibold">Default Sender</p><p class="text-xs text-slate-500">Currently: <strong>${currentFromAddress}</strong></p></div><div class="py-2">${availableSenders
+          .map(
+            (sender) =>
+              `<a href="#" class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 flex items-center justify-between" data-sender="${sender}">${sender}${
+                sender === currentFromAddress
+                  ? '<svg class="w-5 h-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.052-.143z" clip-rule="evenodd" /></svg>'
+                  : ""
+              }</a>`
+          )
+          .join("")}</div>`
+        menuHtml += `<div class="border-t p-2"><a href="#" id="logout-btn" class="block w-full text-center px-4 py-2 text-sm text-red-700 hover:bg-red-50 rounded-md">Logout</a></div>`
+        menu.innerHTML = menuHtml
+        document.getElementById("logout-btn").onclick = () => {
+          localStorage.removeItem("maildeck_token")
+          location.reload()
+        }
+      }
+
+      // --- EVENT LISTENERS ---
+      function addAppEventListeners() {
+        document
+          .getElementById("refreshBtn")
+          .addEventListener("click", () => loadEmails(currentView))
+        document
+          .getElementById("composeBtn")
+          .addEventListener("click", resetAndOpenComposeModal)
+
+        document
+          .getElementById("emailForm")
+          .addEventListener("submit", async (e) => {
+            e.preventDefault()
+            const submitButton = e.target.querySelector('button[type="submit"]')
+            submitButton.disabled = true
+            submitButton.textContent = "Sending..."
+            const formData = new FormData()
+            formData.append("from", document.getElementById("from").value)
+            formData.append("to", document.getElementById("to").value.trim())
+            formData.append("cc", document.getElementById("cc").value.trim())
+            formData.append("bcc", document.getElementById("bcc").value.trim())
+            formData.append(
+              "subject",
+              document.getElementById("subject").value.trim()
+            )
+            formData.append("html", quill.root.innerHTML)
+            for (let i = 0; i < fileInput.files.length; i++) {
+              formData.append("attachments", fileInput.files[i])
+            }
+            try {
+              const res = await authenticatedFetch("/send-email", {
+                method: "POST",
+                body: formData,
+              })
+              const json = await res.json()
+              if (!res.ok) throw new Error(json.message || "Failed to send")
+              showStatus("✅ Email sent successfully!")
+              closeModal(composeModal)
+
+              setTimeout(() => {
+                currentView = "sent"
+                updateActiveNav()
+                loadEmails("sent")
+              }, 2000)
+            } catch (err) {
+              showStatus(`❌ ${err.message}`, "error")
+            } finally {
+              submitButton.disabled = false
+              submitButton.textContent = "Send"
+            }
+          })
+
+        document.getElementById("main-nav").addEventListener("click", (e) => {
+          const link = e.target.closest("a[data-view]")
+          if (link) {
+            e.preventDefault()
+            const view = link.dataset.view
+            if (view !== currentView) {
+              currentView = view
+              updateActiveNav()
+              loadEmails(currentView)
+            }
+          }
+        })
+
+        document
+          .getElementById("account-nav")
+          .addEventListener("click", (e) => {
+            const link = e.target.closest("a[data-account]")
+            if (link) {
+              e.preventDefault()
+              currentAccountFilter = link.dataset.account
+              updateActiveNav()
+              renderPage(1)
+            }
+          })
+
+        searchInput.addEventListener("input", (e) => {
+          searchQuery = e.target.value
+          renderPage(1)
+        })
+
+        emailListDiv.addEventListener("change", (e) => {
+          if (e.target.classList.contains("email-checkbox")) {
+            const emailId = e.target.dataset.emailId
+            const row = e.target.closest(".email-row")
+            if (e.target.checked) {
+              selectedEmails.add(emailId)
+              row.classList.add("email-selected")
+            } else {
+              selectedEmails.delete(emailId)
+              row.classList.remove("email-selected")
+            }
+            updateActionBar()
+          }
+        })
+
+        selectAllCheckbox.addEventListener("change", (e) => {
+          const isChecked = e.target.checked
+          const visibleCheckboxes = emailListDiv.querySelectorAll(
+            ".email-checkbox"
+          )
+          visibleCheckboxes.forEach((cb) => {
+            cb.checked = isChecked
+            const emailId = cb.dataset.emailId
+            const row = cb.closest(".email-row")
+            if (isChecked) {
+              selectedEmails.add(emailId)
+              row.classList.add("email-selected")
+            } else {
+              selectedEmails.delete(emailId)
+              row.classList.remove("email-selected")
+            }
+          })
+          updateActionBar()
+        })
+
+        deleteBtn.addEventListener("click", async () => {
+          const idsToDelete = Array.from(selectedEmails)
+          if (idsToDelete.length === 0) return
+          const isPermanent = currentView === "trash"
+          const confirmMessage = isPermanent
+            ? `Permanently delete these ${idsToDelete.length} conversation(s)? This action cannot be undone.`
+            : `Move these ${idsToDelete.length} conversation(s) to the Trash?`
+
+          if (!confirm(confirmMessage)) return
+          const endpoint = isPermanent
+            ? "/emails/delete-permanently"
+            : "/emails/move-to-trash"
+          try {
+            const res = await authenticatedFetch(`${endpoint}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emailIds: idsToDelete }),
+            })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.message || "Operation failed")
+            showStatus(`✅ ${json.message}`)
+            loadEmails(currentView)
+          } catch (err) {
+            showStatus(`❌ ${err.message}`, "error")
+          }
+        })
+
+        emptyTrashBtn.addEventListener("click", async () => {
+          const allTrashIds = allEmails.map((email) => email.id)
+          if (allTrashIds.length === 0) {
+            showStatus("Trash is already empty.", "success")
+            return
+          }
+          if (
+            !confirm(
+              `Permanently delete all ${allTrashIds.length} conversations in the Trash? This action cannot be undone.`
+            )
+          )
+            return
+          try {
+            const res = await authenticatedFetch("/emails/delete-permanently", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ emailIds: allTrashIds }),
+            })
+            const json = await res.json()
+            if (!res.ok) throw new Error(json.message || "Operation failed")
+            showStatus(`✅ Successfully emptied trash.`)
+            loadEmails("trash")
+          } catch (err) {
+            showStatus(`❌ ${err.message}`, "error")
+          }
+        })
+
+        // Other listeners (modals, settings, mobile nav, etc.)
+        document.querySelectorAll(".modal-close").forEach((btn) =>
+          btn.addEventListener("click", () => {
+            closeModal(composeModal)
+            closeModal(emailModal)
+          })
+        )
+        document
+          .getElementById("settingsBtn")
+          .addEventListener("click", (e) => {
+            e.stopPropagation()
+            document.getElementById("settings-menu").classList.toggle("hidden")
+          })
+        document
+          .getElementById("settings-menu")
+          .addEventListener("click", (e) => {
+            const target = e.target.closest("[data-sender]")
+            if (target) {
+              e.preventDefault()
+              currentFromAddress = target.dataset.sender
+              showStatus(`Default sender set to ${currentFromAddress}`)
+              renderSettingsMenu()
+              setTimeout(
+                () =>
+                  document
+                    .getElementById("settings-menu")
+                    .classList.add("hidden"),
+                200
+              )
+            }
+          })
+        window.addEventListener("click", (e) => {
+          if (
+            document.getElementById("settings-menu") &&
+            !document.getElementById("settingsBtn").contains(e.target) &&
+            !document.getElementById("settings-menu").contains(e.target)
+          )
+            document.getElementById("settings-menu").classList.add("hidden")
+        })
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            closeModal(composeModal)
+            closeModal(emailModal)
+            if (document.getElementById("settings-menu"))
+              document.getElementById("settings-menu").classList.add("hidden")
+          }
+        })
+        document
+          .getElementById("cc-btn")
+          .addEventListener("click", () =>
+            document.getElementById("cc-container").classList.toggle("hidden")
+          )
+        document
+          .getElementById("bcc-btn")
+          .addEventListener("click", () =>
+            document.getElementById("bcc-container").classList.toggle("hidden")
+          )
+        document
+          .getElementById("expandBtn")
+          .addEventListener("click", () =>
+            document
+              .querySelector(".compose-modal")
+              .classList.toggle("maximized")
+          )
+        document
+          .getElementById("attachBtn")
+          .addEventListener("click", () => fileInput.click())
+        fileInput.addEventListener("change", () => {
+          attachmentsList.innerHTML = ""
+          if (fileInput.files.length > 0) {
+            for (const file of fileInput.files) {
+              const fileDiv = document.createElement("div")
+              fileDiv.textContent = `📎 ${file.name} (${(
+                file.size / 1024
+              ).toFixed(1)} KB)`
+              attachmentsList.appendChild(fileDiv)
+            }
+          }
+        })
+        document.getElementById("discardBtn").addEventListener("click", () => {
+          if (quill.getLength() > 1 || fileInput.files.length > 0) {
+            if (confirm("Discard this draft?")) {
+              closeModal(composeModal)
+            }
+          } else {
+            closeModal(composeModal)
+          }
+        })
+        menuBtn.addEventListener("click", () => {
+          sidebar.classList.remove("-translate-x-full")
+          sidebarOverlay.classList.remove("hidden")
+        })
+        const closeSidebar = () => {
+          sidebar.classList.add("-translate-x-full")
+          sidebarOverlay.classList.add("hidden")
+        }
+        sidebarOverlay.addEventListener("click", closeSidebar)
+        sidebar.addEventListener("click", (e) => {
+          if (e.target.closest("a")) {
+            closeSidebar()
+          }
+        })
+        document
+          .getElementById("modalAttachments")
+          .addEventListener("click", async (e) => {
+            const link = e.target.closest("a[data-download-url]")
+            if (link) {
+              e.preventDefault()
+              const url = link.dataset.downloadUrl
+              const filename = link.dataset.filename
+              const originalContent = link.innerHTML
+              link.innerHTML = `<span>Downloading...</span>`
+              link.style.pointerEvents = "none"
+              try {
+                const res = await authenticatedFetch(url)
+                if (!res.ok)
+                  throw new Error(`Download failed: ${res.statusText}`)
+                const blob = await res.blob()
+                const objectUrl = URL.createObjectURL(blob)
+                const tempAnchor = document.createElement("a")
+                tempAnchor.href = objectUrl
+                tempAnchor.download = filename
+                document.body.appendChild(tempAnchor)
+                tempAnchor.click()
+                document.body.removeChild(tempAnchor)
+                URL.revokeObjectURL(objectUrl)
+              } catch (err) {
+                showStatus(`❌ ${err.message}`, "error")
+              } finally {
+                link.innerHTML = originalContent
+                link.style.pointerEvents = "auto"
+              }
+            }
+          })
+      }
+    </script>
+  </body>
+</html>
