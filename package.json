@@ -1,0 +1,14 @@
+{
+  "name": "maildeck-vercel",
+  "version": "1.0.0",
+  "private": true,
+  "main": "api/index.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.556.0",
+    "@aws-sdk/client-sesv2": "^3.556.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "mailparser": "^3.7.1",
+    "multer": "^1.4.5-lts.1"
+  }
+}
