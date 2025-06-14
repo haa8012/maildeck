@@ -65,7 +65,12 @@ async function getVerifiedSenders() {
     console.log("DEBUG: Entering ListEmailIdentities loop.");
     do {
       const command = new ListEmailIdentitiesCommand({ NextToken: nextToken });
-      const response = await sesClient.send(command);
+        const response = await sesClient.send(command);
+        
+          // *** THIS IS THE MOST IMPORTANT LOG ***
+      // It shows us exactly what AWS is sending back to the function.
+        console.log(`DEBUG: RAW RESPONSE CHUNK FROM AWS IS: ${JSON.stringify(response.EmailIdentities, null, 2)}`);
+        
       allIdentities.push(...response.EmailIdentities);
       nextToken = response.NextToken;
     } while (nextToken);
