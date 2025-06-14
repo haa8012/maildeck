@@ -45,53 +45,67 @@ app.use(express.urlencoded({ extended: true }));
  * @returns {Promise<string[]>} - An array of verified email addresses.
  */
 // ─── DYNAMIC SENDER HELPER FUNCTION (WITH DEBUGGING) ────────────────
-async function getVerifiedSenders() {
-  if (cachedSenders !== null) {
-    console.log("DEBUG: Returning senders from cache.");
-    return cachedSenders;
-  }
+// async function getVerifiedSenders() {
 
-  // --- DEBUG 1: Log environment variables to check if they are loaded ---
-  console.log("DEBUG: Checking environment variables...");
-  console.log(`DEBUG: SES_REGION: ${SES_REGION}`);
-  console.log(`DEBUG: S3_BUCKET: ${S3_BUCKET}`);
-  // Mask the secret key for security, but confirm it exists
-  console.log(`DEBUG: AWS_ACCESS_KEY_ID exists: ${!!AWS_ACCESS_KEY_ID}`);
-  console.log(`DEBUG: AWS_SECRET_ACCESS_KEY exists: ${!!AWS_SECRET_ACCESS_KEY}`);
+
+//   if (cachedSenders !== null) {
+//     console.log("DEBUG: Returning senders from cache.");
+//     return cachedSenders;
+//   }
+
+//   // --- DEBUG 1: Log environment variables to check if they are loaded ---
+//   console.log("DEBUG: Checking environment variables...");
+//   console.log(`DEBUG: SES_REGION: ${SES_REGION}`);
+//   console.log(`DEBUG: S3_BUCKET: ${S3_BUCKET}`);
+//   // Mask the secret key for security, but confirm it exists
+//   console.log(`DEBUG: AWS_ACCESS_KEY_ID exists: ${!!AWS_ACCESS_KEY_ID}`);
+//   console.log(`DEBUG: AWS_SECRET_ACCESS_KEY exists: ${!!AWS_SECRET_ACCESS_KEY}`);
   
-  try {
-    const allIdentities = [];
-    let nextToken;
-    console.log("DEBUG: Entering ListEmailIdentities loop.");
-    do {
-      const command = new ListEmailIdentitiesCommand({ NextToken: nextToken });
-        const response = await sesClient.send(command);
+//   try {
+//     const allIdentities = [];
+//     let nextToken;
+//     console.log("DEBUG: Entering ListEmailIdentities loop.");
+//     do {
+//       const command = new ListEmailIdentitiesCommand({ NextToken: nextToken });
+//         const response = await sesClient.send(command);
         
-          // *** THIS IS THE MOST IMPORTANT LOG ***
-      // It shows us exactly what AWS is sending back to the function.
-        console.log(`DEBUG: RAW RESPONSE CHUNK FROM AWS IS: ${JSON.stringify(response.EmailIdentities, null, 2)}`);
+//           // *** THIS IS THE MOST IMPORTANT LOG ***
+//       // It shows us exactly what AWS is sending back to the function.
+//         console.log(`DEBUG: RAW RESPONSE CHUNK FROM AWS IS: ${JSON.stringify(response.EmailIdentities, null, 2)}`);
         
-      allIdentities.push(...response.EmailIdentities);
-      nextToken = response.NextToken;
-    } while (nextToken);
+//       allIdentities.push(...response.EmailIdentities);
+//       nextToken = response.NextToken;
+//     } while (nextToken);
     
-    // --- DEBUG 2: Log the raw response from AWS ---
-    console.log("DEBUG: Raw identities from AWS:", JSON.stringify(allIdentities, null, 2));
+//     // --- DEBUG 2: Log the raw response from AWS ---
+//     console.log("DEBUG: Raw identities from AWS:", JSON.stringify(allIdentities, null, 2));
     
-    const verifiedEmails = allIdentities
-      .filter(identity => identity.IdentityType === 'EMAIL_ADDRESS' && identity.VerifiedForSendingStatus === true)
-      .map(identity => identity.IdentityName);
+//     const verifiedEmails = allIdentities
+//       .filter(identity => identity.IdentityType === 'EMAIL_ADDRESS' && identity.VerifiedForSendingStatus === true)
+//       .map(identity => identity.IdentityName);
 
-    // --- DEBUG 3: Log the final, filtered list ---
-    console.log("DEBUG: Final filtered emails:", verifiedEmails);
+//     // --- DEBUG 3: Log the final, filtered list ---
+//     console.log("DEBUG: Final filtered emails:", verifiedEmails);
 
-    cachedSenders = verifiedEmails;
-    return cachedSenders;
-  } catch (error) {
-    // --- DEBUG 4: Log the EXACT error from the AWS SDK ---
-    console.error("DEBUG: CRITICAL ERROR fetching SES identities:", error);
-    return []; // Return empty on error
-  }
+//     cachedSenders = verifiedEmails;
+//     return cachedSenders;
+//   } catch (error) {
+//     // --- DEBUG 4: Log the EXACT error from the AWS SDK ---
+//     console.error("DEBUG: CRITICAL ERROR fetching SES identities:", error);
+//     return []; // Return empty on error
+//   }
+// }
+
+async function getVerifiedSenders() {
+  console.log("DEBUG: USING HARDCODED SENDER LIST FOR TESTING.");
+  
+  // Use the email addresses from your screenshot
+  const hardcodedSenders = [
+    "admin@oodac.com",
+    "feeback-spinfinity@oodac.com"
+  ];
+  
+  return hardcodedSenders;
 }
 
 // ─── AUTHENTICATION ──────────────────────────────────────────────────
