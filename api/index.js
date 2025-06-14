@@ -3,28 +3,26 @@ const express  = require("express");
 const path     = require("path");
 const cors     = require("cors");
 const multer = require("multer");
-const { SESv2Client, SendEmailCommand } = require("@aws-sdk/client-sesv2");
+const { SESv2Client, SendEmailCommand, ListEmailIdentitiesCommand } = require("@aws-sdk/client-sesv2");
 const { S3Client, ListObjectsV2Command, GetObjectCommand, PutObjectCommand, DeleteObjectsCommand, CopyObjectCommand, DeleteObjectCommand } = require("@aws-sdk/client-s3");
 const { simpleParser } = require("mailparser");
 
-
 // ─── ENVIRONMENT & CONFIG ─────────────────────────────────────────────
-// Vercel will provide these from Environment Variables
 const {
   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
   SES_REGION = "us-east-1",
   S3_BUCKET, S3_REGION = "us-east-1",
   APP_USER, APP_PASSWORD,
-  AUTH_TOKEN, // <-- ADDED HERE
+  AUTH_TOKEN,
 } = process.env;
 
-// Define S3 prefixes for folders
 const INBOX_PREFIX = "";
 const SENT_PREFIX = "sent/";
 const TRASH_PREFIX = "trash/";
 
-// ─── ALLOWED SENDERS ─────────────────────────────────────────────────
-const ALLOWED_SENDERS = ["admin@oodac.com", "feedback-spinfinity@oodac.com"];
+// --- CACHING & DYNAMIC SENDERS ---
+// This variable will cache the list of verified senders to avoid repeated API calls.
+let cachedSenders = null;
 
 // ─── AWS CLIENTS & EXPRESS APP ───────────────────────────────────────
 const credentials = { accessKeyId: AWS_ACCESS_KEY_ID, secretAccessKey: AWS_SECRET_ACCESS_KEY };
@@ -33,15 +31,50 @@ const s3Client  = new S3Client({ region: S3_REGION, credentials });
 const app  = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-
 // --- MIDDLEWARE & CORS ---
-// Let Vercel handle CORS based on its own domain.
-// The VERCEL_URL variable is automatically provided by the platform.
 const allowedOrigin = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://127.0.0.1:5501';
 app.use(cors({ origin: allowedOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+
+// ─── NEW: DYNAMIC SENDER HELPER FUNCTION ─────────────────────────────
+/**
+ * Fetches all verified email addresses from AWS SES and caches the result.
+ * Handles pagination automatically.
+ * @returns {Promise<string[]>} - An array of verified email addresses.
+ */
+async function getVerifiedSenders() {
+  if (cachedSenders !== null) {
+    return cachedSenders; // Return from cache if available
+  }
+
+  try {
+    const allIdentities = [];
+    let nextToken;
+
+    // Loop to handle pagination from the AWS API
+    do {
+      const command = new ListEmailIdentitiesCommand({ NextToken: nextToken });
+      const response = await sesClient.send(command);
+      allIdentities.push(...response.EmailIdentities);
+      nextToken = response.NextToken;
+    } while (nextToken);
+    
+    // Filter for only verified EMAIL_ADDRESS identities and extract the name
+    const verifiedEmails = allIdentities
+      .filter(identity => identity.IdentityType === 'EMAIL_ADDRESS' && identity.VerifiedForSendingStatus === true)
+      .map(identity => identity.IdentityName);
+
+    console.log("Fetched and cached verified senders:", verifiedEmails);
+    cachedSenders = verifiedEmails; // Store in cache
+    return cachedSenders;
+  } catch (error) {
+    console.error("Error fetching SES identities:", error);
+    // In case of error, return an empty array to prevent crashes
+    return [];
+  }
+}
 
 // ─── AUTHENTICATION ──────────────────────────────────────────────────
 app.post("/login", (req, res) => {
@@ -57,7 +90,7 @@ const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith("Bearer ")) {
         const token = authHeader.substring(7, authHeader.length);
-        if (token === AUTH_TOKEN) { // It will now compare against the token from the environment
+        if (token === AUTH_TOKEN) {
             return next();
         }
     }
@@ -114,13 +147,24 @@ const getEmailsFromS3 = async (prefix) => {
     return { emails, totalCount };
 };
 
-// ─── PROTECTED API ROUTES ───────────────────────────────────────────
-// ... All your other routes like app.post("/send-email", ...), etc. remain the same ...
+// ─── API ROUTES ───────────────────────────────────────────────────────
+
+// ─── NEW: Endpoint for the frontend to fetch senders ───
+app.get("/get-senders", authenticate, async (req, res) => {
+    const senders = await getVerifiedSenders();
+    res.json(senders);
+});
+
+// ─── MODIFIED: /send-email route now checks against the dynamic list ───
 app.post("/send-email", authenticate, upload.array('attachments'), async (req, res) => {
   const { from, to, cc, bcc, subject, html } = req.body;
+
+  // Dynamically get the list of allowed senders
+  const allowedSenders = await getVerifiedSenders();
+
   if (!from || !to || !subject || !html) return res.status(400).json({ message: "Missing required fields" });
-  if (!ALLOWED_SENDERS.includes(from)) return res.status(403).json({ message: `Sending from ${from} is not permitted.` });
-  
+  if (!allowedSenders.includes(from)) return res.status(403).json({ message: `Sending from ${from} is not permitted or verified.` });
+
   try {
     let rawEmail = `From: ${from}\nTo: ${to}\n`;
     if (cc) rawEmail += `Cc: ${cc}\n`;
@@ -132,9 +176,7 @@ app.post("/send-email", authenticate, upload.array('attachments'), async (req, r
     rawEmail += `Content-Type: text/html; charset=UTF-8\n\n`;
     rawEmail += `${html}\n\n`;
     
-    const attachments = req.files ? req.files.map(file => ({
-        filename: file.originalname, content: file.buffer, contentType: file.mimetype
-    })) : [];
+    const attachments = req.files ? req.files.map(file => ({ filename: file.originalname, content: file.buffer, contentType: file.mimetype })) : [];
 
     attachments.forEach(att => {
         rawEmail += `--boundary_12345\n`;

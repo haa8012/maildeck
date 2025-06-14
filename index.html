@@ -724,12 +724,9 @@
       // --- GLOBAL STATE & CONFIG ---
       let allEmails = []
       let currentPage = 1
-      let emailsPerPage = 50
-      const availableSenders = [
-        "admin@oodac.com",
-        "feedback-spinfinity@oodac.com",
-      ]
-      let currentFromAddress = availableSenders[0]
+      let emailsPerPage = 20
+      let availableSenders = []
+      let currentFromAddress = ""
       let currentView = "inbox"
       let currentAccountFilter = "all"
       let quill
@@ -764,6 +761,7 @@
       const trashActions = document.getElementById("trashActions")
       const emptyTrashBtn = document.getElementById("emptyTrashBtn")
 
+      // --- AUTHENTICATION & INITIALIZATION ---
       // --- AUTHENTICATION & INITIALIZATION ---
       window.addEventListener("load", () => {
         authToken = localStorage.getItem("maildeck_token")
@@ -802,7 +800,9 @@
         }
       })
 
-      function initializeApp() {
+      async function initializeApp() {
+        // First, fetch the available senders from our new endpoint
+        await loadAvailableSenders()
         initializeQuill()
         loadReadStatus()
         loadEmails(currentView)
@@ -810,7 +810,25 @@
         renderSettingsMenu()
         addAppEventListeners()
       }
-
+      // *** NEW: Function to load senders from the API ***
+      async function loadAvailableSenders() {
+        try {
+          const res = await authenticatedFetch("/get-senders")
+          const data = await res.json()
+          if (res.ok) {
+            availableSenders = data
+            // Set the default sender to the first one in the list, if available
+            if (availableSenders.length > 0) {
+              currentFromAddress = availableSenders[0]
+            }
+          } else {
+            console.error("Failed to load available senders:", data.message)
+          }
+        } catch (err) {
+          console.error("Error fetching available senders:", err)
+          showStatus("❌ Could not load sender accounts.", "error")
+        }
+      }
       function initializeQuill() {
         if (!quill) {
           quill = new Quill("#editor-container", {
