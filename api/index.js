@@ -44,16 +44,25 @@ app.use(express.urlencoded({ extended: true }));
  * Handles pagination automatically.
  * @returns {Promise<string[]>} - An array of verified email addresses.
  */
+// ─── DYNAMIC SENDER HELPER FUNCTION (WITH DEBUGGING) ────────────────
 async function getVerifiedSenders() {
   if (cachedSenders !== null) {
-    return cachedSenders; // Return from cache if available
+    console.log("DEBUG: Returning senders from cache.");
+    return cachedSenders;
   }
 
+  // --- DEBUG 1: Log environment variables to check if they are loaded ---
+  console.log("DEBUG: Checking environment variables...");
+  console.log(`DEBUG: SES_REGION: ${SES_REGION}`);
+  console.log(`DEBUG: S3_BUCKET: ${S3_BUCKET}`);
+  // Mask the secret key for security, but confirm it exists
+  console.log(`DEBUG: AWS_ACCESS_KEY_ID exists: ${!!AWS_ACCESS_KEY_ID}`);
+  console.log(`DEBUG: AWS_SECRET_ACCESS_KEY exists: ${!!AWS_SECRET_ACCESS_KEY}`);
+  
   try {
     const allIdentities = [];
     let nextToken;
-
-    // Loop to handle pagination from the AWS API
+    console.log("DEBUG: Entering ListEmailIdentities loop.");
     do {
       const command = new ListEmailIdentitiesCommand({ NextToken: nextToken });
       const response = await sesClient.send(command);
@@ -61,18 +70,22 @@ async function getVerifiedSenders() {
       nextToken = response.NextToken;
     } while (nextToken);
     
-    // Filter for only verified EMAIL_ADDRESS identities and extract the name
+    // --- DEBUG 2: Log the raw response from AWS ---
+    console.log("DEBUG: Raw identities from AWS:", JSON.stringify(allIdentities, null, 2));
+    
     const verifiedEmails = allIdentities
       .filter(identity => identity.IdentityType === 'EMAIL_ADDRESS' && identity.VerifiedForSendingStatus === true)
       .map(identity => identity.IdentityName);
 
-    console.log("Fetched and cached verified senders:", verifiedEmails);
-    cachedSenders = verifiedEmails; // Store in cache
+    // --- DEBUG 3: Log the final, filtered list ---
+    console.log("DEBUG: Final filtered emails:", verifiedEmails);
+
+    cachedSenders = verifiedEmails;
     return cachedSenders;
   } catch (error) {
-    console.error("Error fetching SES identities:", error);
-    // In case of error, return an empty array to prevent crashes
-    return [];
+    // --- DEBUG 4: Log the EXACT error from the AWS SDK ---
+    console.error("DEBUG: CRITICAL ERROR fetching SES identities:", error);
+    return []; // Return empty on error
   }
 }
 
@@ -151,6 +164,7 @@ const getEmailsFromS3 = async (prefix) => {
 
 // ─── NEW: Endpoint for the frontend to fetch senders ───
 app.get("/get-senders", authenticate, async (req, res) => {
+        console.log("DEBUG: Handler /get-senders hit.");
     const senders = await getVerifiedSenders();
     res.json(senders);
 });
